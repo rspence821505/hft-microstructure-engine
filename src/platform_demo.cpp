@@ -1,6 +1,6 @@
 /**
  * @file platform_demo.cpp
- * @brief Week 4.1: Connect All Components - Demo Program
+ * @brief Week 4.1 & 4.2: Platform Demo with Performance Optimization
  *
  * This program demonstrates the full integration of the Microstructure
  * Analytics Platform, showcasing:
@@ -20,32 +20,43 @@
  *    - Live analytics updates
  *    - Performance monitoring
  *
+ * 4. Week 4.2: Performance Optimization
+ *    - Latency histogram benchmarking
+ *    - Throughput measurement
+ *    - Target verification
+ *    - Component-level profiling
+ *
  * Usage:
  *   ./platform_demo [options] [historical_file.csv]
  *
  * Options:
  *   --historical-only    Run only historical analysis
  *   --realtime           Start real-time mode (requires feeds)
+ *   --benchmark          Run performance benchmarks (Week 4.2)
  *   --verbose            Enable verbose output
  *   --help               Show this help
  */
 
+#include "memory_pool.hpp"
 #include "microstructure_platform.hpp"
 
 #include <iostream>
+#include <random>
 #include <string>
 
 void print_usage(const char* program) {
     std::cout << "Usage: " << program << " [options] [historical_file.csv]\n\n";
-    std::cout << "Week 4.1: Microstructure Analytics Platform Demo\n\n";
+    std::cout << "Week 4.1 & 4.2: Microstructure Analytics Platform Demo\n\n";
     std::cout << "Options:\n";
     std::cout << "  --historical-only    Run only historical analysis (default)\n";
     std::cout << "  --realtime           Start real-time mode (requires mock server)\n";
+    std::cout << "  --benchmark          Run performance benchmarks (Week 4.2)\n";
     std::cout << "  --verbose            Enable verbose output\n";
     std::cout << "  --help               Show this help\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << program << " tests/data/calibration_test.csv\n";
     std::cout << "  " << program << " --verbose tests/data/calibration_test.csv\n";
+    std::cout << "  " << program << " --benchmark  (run performance benchmarks)\n";
     std::cout << "  " << program << " --realtime  (connects to localhost:9000)\n";
 }
 
@@ -154,9 +165,197 @@ void demo_performance_report(MicrostructureAnalyticsPlatform& platform) {
     platform.print_full_report();
 }
 
+/**
+ * @brief Week 4.2: Performance Optimization Benchmarks
+ *
+ * This demo runs comprehensive performance benchmarks measuring:
+ * - Order book update latency
+ * - Analytics computation latency
+ * - Queue handoff latency
+ * - Memory pool allocation speed
+ * - End-to-end pipeline latency
+ */
+void demo_performance_benchmarks(MicrostructureAnalyticsPlatform& platform) {
+    std::cout << "\n";
+    std::cout << "============================================================\n";
+    std::cout << "           WEEK 4.2: PERFORMANCE OPTIMIZATION BENCHMARKS    \n";
+    std::cout << "============================================================\n";
+
+    ComponentLatencyTracker tracker;
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<double> price_dist(99.0, 101.0);
+    std::uniform_int_distribution<int> qty_dist(100, 1000);
+
+    auto& order_book = platform.get_order_book();
+
+    // ============================================================
+    // Benchmark 1: Order Book Update Latency
+    // Target: <1us per event
+    // ============================================================
+    std::cout << "\n--- Benchmark 1: Order Book Updates ---\n";
+    std::cout << "Target: <1us per event, >1M ops/sec\n";
+    std::cout << "Running 100,000 order insertions...\n";
+
+    for (int i = 0; i < 100000; ++i) {
+        auto start = std::chrono::steady_clock::now();
+
+        double price = price_dist(rng);
+        int quantity = qty_dist(rng);
+        Side side = (i % 2 == 0) ? Side::BUY : Side::SELL;
+        Order order(i + 1, 1, side, price, quantity, TimeInForce::GTC);
+        order_book.add_order(order);
+
+        auto end = std::chrono::steady_clock::now();
+        auto latency = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        tracker.order_book_update().record_event_latency(latency);
+    }
+
+    tracker.order_book_update().print_statistics();
+
+    // ============================================================
+    // Benchmark 2: Analytics Computation Latency
+    // Target: <500ns per metric update
+    // ============================================================
+    std::cout << "\n--- Benchmark 2: Analytics Computation ---\n";
+    std::cout << "Target: <500ns per metric update, >500K ops/sec\n";
+    std::cout << "Running 100,000 analytics updates...\n";
+
+    auto& analytics = platform.get_analytics();
+
+    for (int i = 0; i < 100000; ++i) {
+        auto start = std::chrono::steady_clock::now();
+
+        // Simulate analytics computation (access various metrics)
+        [[maybe_unused]] double imbalance = order_book.get_current_imbalance();
+        [[maybe_unused]] double avg_spread = order_book.get_average_spread();
+        [[maybe_unused]] double flow_imbalance = analytics.get_flow_imbalance();
+
+        auto end = std::chrono::steady_clock::now();
+        auto latency = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        tracker.analytics_compute().record_event_latency(latency);
+    }
+
+    tracker.analytics_compute().print_statistics();
+
+    // ============================================================
+    // Benchmark 3: Lock-Free Queue Handoff
+    // Target: <100ns median latency
+    // ============================================================
+    std::cout << "\n--- Benchmark 3: Lock-Free Queue Handoff ---\n";
+    std::cout << "Target: <100ns median latency, >10M ops/sec\n";
+    std::cout << "Running 1,000,000 queue operations...\n";
+
+    // Use SPSC queue from TCP-Socket (included via multi_feed_aggregator)
+    SPSCQueue<int> queue(4096);
+
+    for (int i = 0; i < 1000000; ++i) {
+        auto start = std::chrono::steady_clock::now();
+
+        queue.push(i);
+        auto val = queue.pop();
+        (void)val;
+
+        auto end = std::chrono::steady_clock::now();
+        auto latency = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        tracker.queue_handoff().record_event_latency(latency);
+    }
+
+    tracker.queue_handoff().print_statistics();
+
+    // ============================================================
+    // Benchmark 4: Memory Pool Allocation
+    // ============================================================
+    std::cout << "\n--- Benchmark 4: Memory Pool Allocation ---\n";
+    std::cout << "Comparing arena allocator vs malloc...\n";
+
+    // Arena allocator benchmark
+    {
+        ArenaAllocator arena;
+        auto start = std::chrono::steady_clock::now();
+
+        for (int i = 0; i < 100000; ++i) {
+            void* ptr = arena.allocate(64);
+            (void)ptr;
+        }
+
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        double ns_per_alloc = static_cast<double>(duration.count()) / 100000.0;
+
+        std::cout << "  Arena allocator: " << std::fixed << std::setprecision(1)
+                  << ns_per_alloc << " ns/alloc\n";
+        std::cout << "    Memory usage: " << arena.memory_usage() << " bytes\n";
+        std::cout << "    Utilization: " << arena.utilization() << "%\n";
+    }
+
+    // Malloc benchmark
+    {
+        std::vector<void*> ptrs;
+        ptrs.reserve(100000);
+
+        auto start = std::chrono::steady_clock::now();
+
+        for (int i = 0; i < 100000; ++i) {
+            void* ptr = malloc(64);
+            ptrs.push_back(ptr);
+        }
+
+        auto end = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        double ns_per_alloc = static_cast<double>(duration.count()) / 100000.0;
+
+        std::cout << "  malloc: " << std::fixed << std::setprecision(1)
+                  << ns_per_alloc << " ns/alloc\n";
+
+        for (void* ptr : ptrs) {
+            free(ptr);
+        }
+    }
+
+    // ============================================================
+    // Benchmark 5: End-to-End Pipeline Latency
+    // Target: <10us from market data to analytics result
+    // ============================================================
+    std::cout << "\n--- Benchmark 5: End-to-End Pipeline Latency ---\n";
+    std::cout << "Target: <10us end-to-end, >100K events/sec\n";
+    std::cout << "Running 50,000 complete pipeline cycles...\n";
+
+    for (int i = 0; i < 50000; ++i) {
+        auto start = std::chrono::steady_clock::now();
+
+        // Simulate complete pipeline:
+        // 1. Create order
+        double price = price_dist(rng);
+        int quantity = qty_dist(rng);
+        Side side = (i % 2 == 0) ? Side::BUY : Side::SELL;
+        Order order(200000 + i, 1, side, price, quantity, TimeInForce::GTC);
+
+        // 2. Insert into order book (triggers matching)
+        order_book.add_order(order);
+
+        // 3. Read analytics results
+        [[maybe_unused]] double imbalance = order_book.get_current_imbalance();
+        [[maybe_unused]] double spread = order_book.get_average_spread();
+
+        auto end = std::chrono::steady_clock::now();
+        auto latency = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        tracker.end_to_end().record_event_latency(latency);
+    }
+
+    tracker.end_to_end().print_statistics();
+
+    // ============================================================
+    // Summary and Target Verification
+    // ============================================================
+    std::cout << "\n";
+    tracker.print_summary_table();
+    tracker.verify_week42_targets();
+}
+
 int main(int argc, char* argv[]) {
     bool historical_only = true;
     bool realtime = false;
+    bool benchmark = false;
     bool verbose = false;
     std::string filename = "";
 
@@ -172,6 +371,8 @@ int main(int argc, char* argv[]) {
             realtime = false;
         } else if (arg == "--realtime") {
             realtime = true;
+        } else if (arg == "--benchmark") {
+            benchmark = true;
         } else if (arg == "--verbose") {
             verbose = true;
         } else if (arg[0] != '-') {
@@ -192,7 +393,7 @@ int main(int argc, char* argv[]) {
     std::cout << "##############################################################\n";
     std::cout << "#                                                            #\n";
     std::cout << "#         MICROSTRUCTURE ANALYTICS PLATFORM                  #\n";
-    std::cout << "#         Week 4.1: Connect All Components                   #\n";
+    std::cout << "#         Week 4.1 & 4.2: Integration + Optimization         #\n";
     std::cout << "#                                                            #\n";
     std::cout << "##############################################################\n";
 
@@ -210,22 +411,27 @@ int main(int argc, char* argv[]) {
     try {
         platform.initialize();
 
-        // Demo 1: Historical Analysis
-        demo_historical_analysis(platform, filename);
+        // Week 4.2: Run performance benchmarks if requested
+        if (benchmark) {
+            demo_performance_benchmarks(platform);
+        } else {
+            // Demo 1: Historical Analysis
+            demo_historical_analysis(platform, filename);
 
-        // Demo 2: Execution Strategy Testing
-        demo_execution_strategies(platform, filename);
+            // Demo 2: Execution Strategy Testing
+            demo_execution_strategies(platform, filename);
 
-        // Demo 3: Analytics Engine
-        demo_analytics_engine(platform);
+            // Demo 3: Analytics Engine
+            demo_analytics_engine(platform);
 
-        // Demo 4: Real-Time Mode (optional)
-        if (realtime) {
-            demo_realtime_mode(platform);
+            // Demo 4: Real-Time Mode (optional)
+            if (realtime) {
+                demo_realtime_mode(platform);
+            }
+
+            // Demo 5: Full Report
+            demo_performance_report(platform);
         }
-
-        // Demo 5: Full Report
-        demo_performance_report(platform);
 
         std::cout << "\n";
         std::cout << "##############################################################\n";

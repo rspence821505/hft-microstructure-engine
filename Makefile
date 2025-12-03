@@ -50,6 +50,7 @@ CALIBRATION_TEST_SRC = $(TESTS_DIR)/test_market_impact_calibration.cpp
 TWAP_TEST_SRC = $(TESTS_DIR)/test_twap_strategy.cpp
 EXECUTION_COSTS_TEST_SRC = $(TESTS_DIR)/test_execution_costs.cpp
 PLATFORM_TEST_SRC = $(TESTS_DIR)/test_platform_integration.cpp
+PERF_BENCHMARK_SRC = $(TESTS_DIR)/test_performance_benchmarks.cpp
 
 # Targets
 BACKTESTER = $(BUILD_DIR)/backtester
@@ -61,10 +62,11 @@ CALIBRATION_TEST = $(BUILD_DIR)/test_calibration
 TWAP_TEST = $(BUILD_DIR)/test_twap
 EXECUTION_COSTS_TEST = $(BUILD_DIR)/test_execution_costs
 PLATFORM_TEST = $(BUILD_DIR)/test_platform
+PERF_BENCHMARK = $(BUILD_DIR)/test_performance_benchmarks
 
 # Default target
 .PHONY: all
-all: $(BACKTESTER) $(PLATFORM_DEMO) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(EXECUTION_COSTS_TEST)
+all: $(BACKTESTER) $(PLATFORM_DEMO) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(EXECUTION_COSTS_TEST) $(PERF_BENCHMARK)
 
 # Create build directory
 $(BUILD_DIR):
@@ -146,10 +148,15 @@ $(TWAP_TEST): $(TWAP_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
 		-o $@ $(TWAP_TEST_SRC) $(MATCHING_ENGINE_SRCS)
 
-# Build execution costs test 
+# Build execution costs test
 $(EXECUTION_COSTS_TEST): $(EXECUTION_COSTS_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
 		-o $@ $(EXECUTION_COSTS_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+
+# Build performance benchmarks test (Week 4.2)
+$(PERF_BENCHMARK): $(PERF_BENCHMARK_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(PERF_BENCHMARK_SRC) $(MATCHING_ENGINE_SRCS)
 
 # Build order book test in debug mode
 .PHONY: debug-orderbook
@@ -223,14 +230,28 @@ test-twap: $(TWAP_TEST)
 	$(TWAP_TEST)
 	@echo ""
 
-# Run execution costs tests 
+# Run execution costs tests
 .PHONY: test-execution-costs
 test-execution-costs: $(EXECUTION_COSTS_TEST)
 	@echo "=== Running Execution Costs Tests  ==="
 	$(EXECUTION_COSTS_TEST)
 	@echo ""
 
-# Run platform integration tests 
+# Run performance benchmarks (Week 4.2)
+.PHONY: test-performance
+test-performance: $(PERF_BENCHMARK)
+	@echo "=== Running Performance Benchmarks (Week 4.2) ==="
+	$(PERF_BENCHMARK)
+	@echo ""
+
+# Run platform demo with benchmarks (Week 4.2)
+.PHONY: run-benchmark
+run-benchmark: $(PLATFORM_DEMO)
+	@echo "=== Running Performance Benchmark Demo (Week 4.2) ==="
+	$(PLATFORM_DEMO) --benchmark
+	@echo ""
+
+# Run platform integration tests
 .PHONY: test-platform
 test-platform: $(PLATFORM_TEST)
 	@echo "=== Running Platform Integration Tests  ==="
@@ -239,7 +260,7 @@ test-platform: $(PLATFORM_TEST)
 
 # Run all tests
 .PHONY: test
-test: test-backtester test-orderbook test-flow test-calibration test-twap test-execution-costs
+test: test-backtester test-orderbook test-flow test-calibration test-twap test-execution-costs test-performance
 	@echo "=== All Tests Complete ==="
 
 # Run all tests including platform integration
@@ -272,12 +293,16 @@ help:
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make install      - Install to /usr/local/bin"
 	@echo ""
-	@echo " Platform Integration:"
+	@echo "Platform Integration:"
 	@echo "  make platform_demo      - Build platform demo"
 	@echo "  make run-platform       - Run platform demo"
 	@echo "  make run-platform-verbose - Run platform demo with verbose output"
 	@echo "  make debug-platform     - Build platform demo in debug mode"
 	@echo "  make test-platform      - Run platform integration tests"
+	@echo ""
+	@echo "Week 4.2: Performance Optimization:"
+	@echo "  make run-benchmark      - Run performance benchmark demo"
+	@echo "  make test-performance   - Run performance benchmark tests"
 	@echo ""
 	@echo "Debug Builds:"
 	@echo "  make debug-orderbook    - Build order book test in debug mode"
@@ -295,13 +320,16 @@ help:
 	@echo "  make test-calibration   - Run calibration tests only"
 	@echo "  make test-twap          - Run TWAP strategy tests only"
 	@echo "  make test-execution-costs - Run execution costs tests"
+	@echo "  make test-performance   - Run performance benchmarks"
 	@echo ""
 	@echo "Executables:"
 	@echo "  ./build/backtester [options] filename.csv"
 	@echo "  ./build/platform_demo [options] filename.csv"
+	@echo "  ./build/platform_demo --benchmark  (Week 4.2 benchmarks)"
 	@echo "  ./build/test_order_book"
 	@echo "  ./build/test_flow_tracking"
 	@echo "  ./build/test_calibration"
 	@echo "  ./build/test_twap"
 	@echo "  ./build/test_execution_costs"
+	@echo "  ./build/test_performance_benchmarks"
 	@echo "  ./build/test_platform"
