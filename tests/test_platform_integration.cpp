@@ -1,6 +1,6 @@
 /**
  * @file test_platform_integration.cpp
- * @brief Week 4.1: Platform Integration Tests
+ * @brief Platform Integration Tests
  *
  * Tests the full integration of the Microstructure Analytics Platform,
  * verifying that all components work together correctly.

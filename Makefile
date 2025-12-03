@@ -15,42 +15,36 @@ INCLUDE_DIR = include
 SRC_DIR = src
 BUILD_DIR = build
 TESTS_DIR = tests
+BENCHMARKS_DIR = benchmarks
+EXAMPLES_DIR = examples
+DATA_DIR = data
 
-# Matching-Engine paths (sibling directory)
-MATCHING_ENGINE_DIR = ../Matching-Engine
-MATCHING_ENGINE_INCLUDE = $(MATCHING_ENGINE_DIR)/include
-MATCHING_ENGINE_SRC = $(MATCHING_ENGINE_DIR)/src
+# All include paths (include subdirectories for new structure)
+EXTERNAL_INCLUDES = -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/csv -I$(INCLUDE_DIR)/queues -I$(INCLUDE_DIR)/order_book -I$(INCLUDE_DIR)/networking -I$(INCLUDE_DIR)/analytics -I$(INCLUDE_DIR)/execution -I$(INCLUDE_DIR)/platform
 
-# TCP-Socket paths (sibling directory)
-TCP_SOCKET_DIR = ../TCP-Socket
-TCP_SOCKET_INCLUDE = $(TCP_SOCKET_DIR)/include
-
-# All external include paths
-EXTERNAL_INCLUDES = -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) -I$(TCP_SOCKET_INCLUDE)
-
-# Matching-Engine source files needed for linking
-MATCHING_ENGINE_SRCS = \
-	$(MATCHING_ENGINE_SRC)/order.cpp \
-	$(MATCHING_ENGINE_SRC)/order_book.cpp \
-	$(MATCHING_ENGINE_SRC)/order_book_matching.cpp \
-	$(MATCHING_ENGINE_SRC)/order_book_reporting.cpp \
-	$(MATCHING_ENGINE_SRC)/order_book_stops.cpp \
-	$(MATCHING_ENGINE_SRC)/order_book_persistence.cpp \
-	$(MATCHING_ENGINE_SRC)/fill_router.cpp \
-	$(MATCHING_ENGINE_SRC)/fill.cpp \
-	$(MATCHING_ENGINE_SRC)/snapshot.cpp \
-	$(MATCHING_ENGINE_SRC)/event.cpp
+# Order book source files (now local)
+ORDER_BOOK_SRCS = \
+	$(SRC_DIR)/order_book/order.cpp \
+	$(SRC_DIR)/order_book/order_book.cpp \
+	$(SRC_DIR)/order_book/order_book_matching.cpp \
+	$(SRC_DIR)/order_book/order_book_reporting.cpp \
+	$(SRC_DIR)/order_book/order_book_stops.cpp \
+	$(SRC_DIR)/order_book/order_book_persistence.cpp \
+	$(SRC_DIR)/order_book/fill_router.cpp \
+	$(SRC_DIR)/order_book/fill.cpp \
+	$(SRC_DIR)/order_book/snapshot.cpp \
+	$(SRC_DIR)/order_book/event.cpp
 
 # Source files
-BACKTESTER_SRC = $(SRC_DIR)/backtester.cpp
-PLATFORM_DEMO_SRC = $(SRC_DIR)/platform_demo.cpp
+BACKTESTER_SRC = $(SRC_DIR)/csv/backtester.cpp
+PLATFORM_DEMO_SRC = $(EXAMPLES_DIR)/platform_demo.cpp
 ORDERBOOK_TEST_SRC = $(TESTS_DIR)/test_microstructure_order_book.cpp
 FLOW_TRACKING_TEST_SRC = $(TESTS_DIR)/test_order_flow_tracking.cpp
 CALIBRATION_TEST_SRC = $(TESTS_DIR)/test_market_impact_calibration.cpp
 TWAP_TEST_SRC = $(TESTS_DIR)/test_twap_strategy.cpp
 EXECUTION_COSTS_TEST_SRC = $(TESTS_DIR)/test_execution_costs.cpp
 PLATFORM_TEST_SRC = $(TESTS_DIR)/test_platform_integration.cpp
-PERF_BENCHMARK_SRC = $(TESTS_DIR)/test_performance_benchmarks.cpp
+PERF_BENCHMARK_SRC = $(BENCHMARKS_DIR)/test_performance_benchmarks.cpp
 
 # Targets
 BACKTESTER = $(BUILD_DIR)/backtester
@@ -73,15 +67,15 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Build optimized backtester
-$(BACKTESTER): $(BACKTESTER_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -o $@ $(BACKTESTER_SRC)
+$(BACKTESTER): $(BACKTESTER_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) -o $@ $(BACKTESTER_SRC)
 
 # Build debug backtester
 .PHONY: debug
 debug: $(BACKTESTER_DEBUG)
 
-$(BACKTESTER_DEBUG): $(BACKTESTER_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -o $@ $(BACKTESTER_SRC)
+$(BACKTESTER_DEBUG): $(BACKTESTER_SRC) | $(BUILD_DIR)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) -o $@ $(BACKTESTER_SRC)
 
 # ============================================================
 #  Platform Integration Build Targets
@@ -94,34 +88,34 @@ platform_demo: $(PLATFORM_DEMO)
 .PHONY: test_platform
 test_platform: $(PLATFORM_TEST)
 
-# Build platform demo 
-$(PLATFORM_DEMO): $(PLATFORM_DEMO_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
+# Build platform demo
+$(PLATFORM_DEMO): $(PLATFORM_DEMO_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
-		-o $@ $(PLATFORM_DEMO_SRC) $(MATCHING_ENGINE_SRCS)
+		-o $@ $(PLATFORM_DEMO_SRC) $(ORDER_BOOK_SRCS)
 
 # Build platform demo in debug mode
 .PHONY: debug-platform
 debug-platform: | $(BUILD_DIR)
 	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
-		-o $(BUILD_DIR)/platform_demo_debug $(PLATFORM_DEMO_SRC) $(MATCHING_ENGINE_SRCS)
+		-o $(BUILD_DIR)/platform_demo_debug $(PLATFORM_DEMO_SRC) $(ORDER_BOOK_SRCS)
 
 # Build platform integration test
-$(PLATFORM_TEST): $(PLATFORM_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
+$(PLATFORM_TEST): $(PLATFORM_TEST_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
-		-o $@ $(PLATFORM_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+		-o $@ $(PLATFORM_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Run platform demo
 .PHONY: run-platform
 run-platform: $(PLATFORM_DEMO)
 	@echo "=== Running Platform Demo ==="
-	$(PLATFORM_DEMO) $(TESTS_DIR)/data/calibration_test.csv
+	$(PLATFORM_DEMO) $(DATA_DIR)/calibration_test.csv
 	@echo ""
 
 # Run platform demo with verbose output
 .PHONY: run-platform-verbose
 run-platform-verbose: $(PLATFORM_DEMO)
 	@echo "=== Running Platform Demo (Verbose) ==="
-	$(PLATFORM_DEMO) --verbose $(TESTS_DIR)/data/calibration_test.csv
+	$(PLATFORM_DEMO) --verbose $(DATA_DIR)/calibration_test.csv
 	@echo ""
 
 # ============================================================
@@ -129,64 +123,64 @@ run-platform-verbose: $(PLATFORM_DEMO)
 # ============================================================
 
 # Build order book analytics test
-$(ORDERBOOK_TEST): $(ORDERBOOK_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $@ $(ORDERBOOK_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+$(ORDERBOOK_TEST): $(ORDERBOOK_TEST_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(ORDERBOOK_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build order flow tracking test
-$(FLOW_TRACKING_TEST): $(FLOW_TRACKING_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $@ $(FLOW_TRACKING_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+$(FLOW_TRACKING_TEST): $(FLOW_TRACKING_TEST_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(FLOW_TRACKING_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build market impact calibration test
-$(CALIBRATION_TEST): $(CALIBRATION_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $@ $(CALIBRATION_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+$(CALIBRATION_TEST): $(CALIBRATION_TEST_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(CALIBRATION_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build TWAP strategy test
-$(TWAP_TEST): $(TWAP_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $@ $(TWAP_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+$(TWAP_TEST): $(TWAP_TEST_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(TWAP_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build execution costs test
-$(EXECUTION_COSTS_TEST): $(EXECUTION_COSTS_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $@ $(EXECUTION_COSTS_TEST_SRC) $(MATCHING_ENGINE_SRCS)
-
-# Build performance benchmarks test (Week 4.2)
-$(PERF_BENCHMARK): $(PERF_BENCHMARK_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
+$(EXECUTION_COSTS_TEST): $(EXECUTION_COSTS_TEST_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
-		-o $@ $(PERF_BENCHMARK_SRC) $(MATCHING_ENGINE_SRCS)
+		-o $@ $(EXECUTION_COSTS_TEST_SRC) $(ORDER_BOOK_SRCS)
+
+# Build performance benchmarks test
+$(PERF_BENCHMARK): $(PERF_BENCHMARK_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(PERF_BENCHMARK_SRC) $(ORDER_BOOK_SRCS)
 
 # Build order book test in debug mode
 .PHONY: debug-orderbook
 debug-orderbook: | $(BUILD_DIR)
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $(BUILD_DIR)/test_order_book_debug $(ORDERBOOK_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
+		-o $(BUILD_DIR)/test_order_book_debug $(ORDERBOOK_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build flow tracking test in debug mode
 .PHONY: debug-flow
 debug-flow: | $(BUILD_DIR)
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $(BUILD_DIR)/test_flow_tracking_debug $(FLOW_TRACKING_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
+		-o $(BUILD_DIR)/test_flow_tracking_debug $(FLOW_TRACKING_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build calibration test in debug mode
 .PHONY: debug-calibration
 debug-calibration: | $(BUILD_DIR)
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $(BUILD_DIR)/test_calibration_debug $(CALIBRATION_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
+		-o $(BUILD_DIR)/test_calibration_debug $(CALIBRATION_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build TWAP test in debug mode
 .PHONY: debug-twap
 debug-twap: | $(BUILD_DIR)
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $(BUILD_DIR)/test_twap_debug $(TWAP_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
+		-o $(BUILD_DIR)/test_twap_debug $(TWAP_TEST_SRC) $(ORDER_BOOK_SRCS)
 
-# Build execution costs test in debug mode 
+# Build execution costs test in debug mode
 .PHONY: debug-execution-costs
 debug-execution-costs: | $(BUILD_DIR)
-	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
-		-o $(BUILD_DIR)/test_execution_costs_debug $(EXECUTION_COSTS_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
+		-o $(BUILD_DIR)/test_execution_costs_debug $(EXECUTION_COSTS_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # ============================================================
 # Test Targets
@@ -196,10 +190,10 @@ debug-execution-costs: | $(BUILD_DIR)
 .PHONY: test-backtester
 test-backtester: $(BACKTESTER)
 	@echo "=== Running Backtester Tests ==="
-	$(BACKTESTER) --impact --stats $(TESTS_DIR)/data/test_data.csv
+	$(BACKTESTER) --impact --stats $(DATA_DIR)/calibration_test.csv
 	@echo ""
 	@echo "=== Running Symbol Filter Test ==="
-	$(BACKTESTER) --symbol=AAPL --impact $(TESTS_DIR)/data/test_data.csv
+	$(BACKTESTER) --symbol=AAPL --impact $(DATA_DIR)/calibration_test.csv
 	@echo ""
 
 # Run order book tests
@@ -237,17 +231,17 @@ test-execution-costs: $(EXECUTION_COSTS_TEST)
 	$(EXECUTION_COSTS_TEST)
 	@echo ""
 
-# Run performance benchmarks (Week 4.2)
+# Run performance benchmarks
 .PHONY: test-performance
 test-performance: $(PERF_BENCHMARK)
-	@echo "=== Running Performance Benchmarks (Week 4.2) ==="
+	@echo "=== Running Performance Benchmarks ==="
 	$(PERF_BENCHMARK)
 	@echo ""
 
-# Run platform demo with benchmarks (Week 4.2)
+# Run platform demo with benchmarks
 .PHONY: run-benchmark
 run-benchmark: $(PLATFORM_DEMO)
-	@echo "=== Running Performance Benchmark Demo (Week 4.2) ==="
+	@echo "=== Running Performance Benchmark Demo ==="
 	$(PLATFORM_DEMO) --benchmark
 	@echo ""
 
@@ -300,7 +294,7 @@ help:
 	@echo "  make debug-platform     - Build platform demo in debug mode"
 	@echo "  make test-platform      - Run platform integration tests"
 	@echo ""
-	@echo "Week 4.2: Performance Optimization:"
+	@echo "Performance Optimization:"
 	@echo "  make run-benchmark      - Run performance benchmark demo"
 	@echo "  make test-performance   - Run performance benchmark tests"
 	@echo ""
@@ -325,7 +319,7 @@ help:
 	@echo "Executables:"
 	@echo "  ./build/backtester [options] filename.csv"
 	@echo "  ./build/platform_demo [options] filename.csv"
-	@echo "  ./build/platform_demo --benchmark  (Week 4.2 benchmarks)"
+	@echo "  ./build/platform_demo --benchmark  (performance benchmarks)"
 	@echo "  ./build/test_order_book"
 	@echo "  ./build/test_flow_tracking"
 	@echo "  ./build/test_calibration"

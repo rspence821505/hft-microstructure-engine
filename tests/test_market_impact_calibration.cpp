@@ -1,6 +1,6 @@
-#include "../include/linear_regression.hpp"
-#include "../include/market_impact_calibration.hpp"
-#include "../include/microstructure_analytics.hpp"
+#include "linear_regression.hpp"
+#include "market_impact_calibration.hpp"
+#include "microstructure_analytics.hpp"
 #include <cassert>
 #include <chrono>
 #include <cmath>

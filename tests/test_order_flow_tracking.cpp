@@ -1,5 +1,5 @@
-#include "../include/microstructure_analytics.hpp"
-#include "../include/microstructure_order_book.hpp"
+#include "microstructure_analytics.hpp"
+#include "microstructure_order_book.hpp"
 #include <cassert>
 #include <chrono>
 #include <iomanip>

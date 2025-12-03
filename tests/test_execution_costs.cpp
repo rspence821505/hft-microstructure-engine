@@ -1,6 +1,6 @@
 /**
  * @file test_execution_costs.cpp
- * @brief Week 3.2: Test Execution Costs
+ * @brief Test Execution Costs
  *
  * Comprehensive test suite for execution cost analysis including:
  * - Impact model calibration from historical data
@@ -10,10 +10,10 @@
  * - Cost savings demonstration (10-30% target)
  */
 
-#include "../include/microstructure_backtester.hpp"
-#include "../include/twap_strategy.hpp"
-#include "../include/execution_simulator.hpp"
-#include "../include/market_impact_calibration.hpp"
+#include "backtester.hpp"
+#include "twap_strategy.hpp"
+#include "execution_simulator.hpp"
+#include "market_impact_calibration.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -158,13 +158,13 @@ void test_twap_historical_replay() {
 }
 
 /**
- * @brief Demonstrates the full Week 3.2 test_execution_strategy() function
+ * @brief Demonstrates the full test_execution_strategy() function
  *
  * This is the primary deliverable: TWAP demonstrating cost reduction
  * vs naive execution on historical replay.
  */
 void test_execution_strategy() {
-    std::cout << "\n=== Week 3.2: Test Execution Strategy ===\n\n";
+    std::cout << "\n=== Test Execution Strategy ===\n\n";
 
     // Step 1: Generate historical data (simulating AAPL_2024-01-15.csv)
     std::string data_file = "tests/data/AAPL_execution_test.csv";
@@ -469,12 +469,12 @@ void setup_test_environment() {
 }
 
 /**
- * @brief Main test runner for Week 3.2: Test Execution Costs
+ * @brief Main test runner for Test Execution Costs
  */
 int main() {
     std::cout << "\n";
     std::cout << "╔═══════════════════════════════════════════════════════════════╗\n";
-    std::cout << "║     Week 3.2: Test Execution Costs - Test Suite               ║\n";
+    std::cout << "║         Test Execution Costs - Test Suite                     ║\n";
     std::cout << "╚═══════════════════════════════════════════════════════════════╝\n";
     std::cout << "\n";
 
@@ -500,7 +500,7 @@ int main() {
 
         std::cout << "\n";
         std::cout << "╔═══════════════════════════════════════════════════════════════╗\n";
-        std::cout << "║           All Week 3.2 Tests Completed Successfully!          ║\n";
+        std::cout << "║           All Tests Completed Successfully!                   ║\n";
         std::cout << "╚═══════════════════════════════════════════════════════════════╝\n";
         std::cout << "\n";
 

@@ -1,6 +1,6 @@
-#include "../include/execution_algorithm.hpp"
-#include "../include/execution_simulator.hpp"
-#include "../include/twap_strategy.hpp"
+#include "execution_algorithm.hpp"
+#include "execution_simulator.hpp"
+#include "twap_strategy.hpp"
 #include <cassert>
 #include <chrono>
 #include <cmath>
