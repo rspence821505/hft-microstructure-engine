@@ -235,7 +235,7 @@ public:
             event.symbol = row.symbol;
             event.price = row.price;
             event.volume = static_cast<uint64_t>(row.volume);
-            event.type = EventType::TRADE;  // Default to TRADE for simple CSV
+            event.type = MarketEventType::TRADE;  // Default to TRADE for simple CSV
 
             event_timeline_.push_back(event);
         }

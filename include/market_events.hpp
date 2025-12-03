@@ -6,13 +6,14 @@
 #include <string>
 
 /**
- * @enum EventType
+ * @enum MarketEventType
  * @brief Enumeration of market event types
  *
  * Defines the different types of market events that can occur
- * in a trading system.
+ * in a trading system. Named MarketEventType to avoid conflict with
+ * Matching-Engine's EventType.
  */
-enum class EventType {
+enum class MarketEventType {
     TRADE,          ///< A trade execution
     QUOTE,          ///< A quote update (bid/ask)
     ORDER_ADD,      ///< New order added to book
@@ -33,7 +34,7 @@ struct MarketEvent {
     std::string symbol;     ///< Trading symbol (e.g., "AAPL", "GOOGL")
     double price;           ///< Price at which the event occurred
     uint64_t volume;        ///< Volume associated with the event
-    EventType type;         ///< Type of market event
+    MarketEventType type;   ///< Type of market event
 
     /**
      * @brief Comparison operator for sorting events chronologically
