@@ -39,6 +39,7 @@ ORDERBOOK_TEST_SRC = $(TESTS_DIR)/test_microstructure_order_book.cpp
 FLOW_TRACKING_TEST_SRC = $(TESTS_DIR)/test_order_flow_tracking.cpp
 CALIBRATION_TEST_SRC = $(TESTS_DIR)/test_market_impact_calibration.cpp
 TWAP_TEST_SRC = $(TESTS_DIR)/test_twap_strategy.cpp
+EXECUTION_COSTS_TEST_SRC = $(TESTS_DIR)/test_execution_costs.cpp
 
 # Targets
 BACKTESTER = $(BUILD_DIR)/backtester
@@ -47,10 +48,11 @@ ORDERBOOK_TEST = $(BUILD_DIR)/test_order_book
 FLOW_TRACKING_TEST = $(BUILD_DIR)/test_flow_tracking
 CALIBRATION_TEST = $(BUILD_DIR)/test_calibration
 TWAP_TEST = $(BUILD_DIR)/test_twap
+EXECUTION_COSTS_TEST = $(BUILD_DIR)/test_execution_costs
 
 # Default target
 .PHONY: all
-all: $(BACKTESTER) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST)
+all: $(BACKTESTER) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(EXECUTION_COSTS_TEST)
 
 # Create build directory
 $(BUILD_DIR):
@@ -87,6 +89,11 @@ $(TWAP_TEST): $(TWAP_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
 		-o $@ $(TWAP_TEST_SRC) $(MATCHING_ENGINE_SRCS)
 
+# Build execution costs test (Week 3.2)
+$(EXECUTION_COSTS_TEST): $(EXECUTION_COSTS_TEST_SRC) $(INCLUDE_DIR)/*.hpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
+		-o $@ $(EXECUTION_COSTS_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+
 # Build order book test in debug mode
 .PHONY: debug-orderbook
 debug-orderbook: | $(BUILD_DIR)
@@ -110,6 +117,12 @@ debug-calibration: | $(BUILD_DIR)
 debug-twap: | $(BUILD_DIR)
 	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
 		-o $(BUILD_DIR)/test_twap_debug $(TWAP_TEST_SRC) $(MATCHING_ENGINE_SRCS)
+
+# Build execution costs test in debug mode (Week 3.2)
+.PHONY: debug-execution-costs
+debug-execution-costs: | $(BUILD_DIR)
+	$(CXX) $(DEBUG_FLAGS) -I$(INCLUDE_DIR) -I$(MATCHING_ENGINE_INCLUDE) \
+		-o $(BUILD_DIR)/test_execution_costs_debug $(EXECUTION_COSTS_TEST_SRC) $(MATCHING_ENGINE_SRCS)
 
 # Run backtester tests 
 .PHONY: test-backtester
@@ -149,9 +162,16 @@ test-twap: $(TWAP_TEST)
 	$(TWAP_TEST)
 	@echo ""
 
+# Run execution costs tests (Week 3.2)
+.PHONY: test-execution-costs
+test-execution-costs: $(EXECUTION_COSTS_TEST)
+	@echo "=== Running Execution Costs Tests (Week 3.2) ==="
+	$(EXECUTION_COSTS_TEST)
+	@echo ""
+
 # Run all tests
 .PHONY: test
-test: test-backtester test-orderbook test-flow test-calibration test-twap
+test: test-backtester test-orderbook test-flow test-calibration test-twap test-execution-costs
 	@echo "=== All Tests Complete ==="
 
 # Clean build artifacts
@@ -175,12 +195,14 @@ help:
 	@echo "  make debug-flow   - Build flow tracking test in debug mode"
 	@echo "  make debug-calibration - Build calibration test in debug mode"
 	@echo "  make debug-twap   - Build TWAP test in debug mode"
+	@echo "  make debug-execution-costs - Build execution costs test in debug mode"
 	@echo "  make test         - Run all tests"
 	@echo "  make test-backtester - Run backtester tests only"
 	@echo "  make test-orderbook  - Run order book tests only"
 	@echo "  make test-flow    - Run flow tracking tests only"
 	@echo "  make test-calibration - Run calibration tests only"
 	@echo "  make test-twap    - Run TWAP strategy tests only"
+	@echo "  make test-execution-costs - Run execution costs tests (Week 3.2)"
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make install      - Install to /usr/local/bin"
 	@echo ""
@@ -198,3 +220,6 @@ help:
 	@echo ""
 	@echo "TWAP Execution Strategy:"
 	@echo "  ./build/test_twap"
+	@echo ""
+	@echo "Execution Costs Testing (Week 3.2):"
+	@echo "  ./build/test_execution_costs"

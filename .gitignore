@@ -42,5 +42,7 @@
 
 docs/
 
+tests/data
+
 *mic
 *_plan.md

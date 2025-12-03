@@ -2,13 +2,19 @@
 #define MICROSTRUCTURE_BACKTESTER_HPP
 
 #include "market_events.hpp"
+#include "market_impact_calibration.hpp"
+#include "execution_algorithm.hpp"
+#include "execution_simulator.hpp"
+
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -400,6 +406,267 @@ public:
      */
     SimpleImpactModel& get_impact_model() {
         return impact_model_;
+    }
+
+    /**
+     * @struct ExecutionStrategyResult
+     * @brief Results from testing an execution strategy on historical data
+     */
+    struct ExecutionStrategyResult {
+        std::string algorithm_name;                    ///< Name of the algorithm
+        double avg_execution_price = 0.0;              ///< Volume-weighted average price
+        double implementation_shortfall_bps = 0.0;     ///< Cost vs arrival in bps
+        double arrival_price = 0.0;                    ///< Price at start
+        double terminal_price = 0.0;                   ///< Price at end
+        size_t num_trades = 0;                         ///< Number of trades executed
+        uint64_t total_quantity = 0;                   ///< Total quantity executed
+        uint64_t target_quantity = 0;                  ///< Target quantity
+        double fill_rate = 0.0;                        ///< Percentage filled
+        std::chrono::milliseconds execution_time{0};   ///< Total execution time
+
+        void print() const {
+            std::cout << "\n=== Execution Strategy Result: " << algorithm_name << " ===\n";
+            std::cout << "  Arrival price: " << arrival_price << "\n";
+            std::cout << "  Avg execution price: " << avg_execution_price << "\n";
+            std::cout << "  Terminal price: " << terminal_price << "\n";
+            std::cout << "  Implementation shortfall: " << implementation_shortfall_bps << " bps\n";
+            std::cout << "  Target quantity: " << target_quantity << "\n";
+            std::cout << "  Total executed: " << total_quantity << "\n";
+            std::cout << "  Fill rate: " << (fill_rate * 100.0) << "%\n";
+            std::cout << "  Num trades: " << num_trades << "\n";
+            std::cout << "  Execution time: " << execution_time.count() << " ms\n";
+        }
+    };
+
+    /**
+     * @brief Calibrates market impact model from historical event timeline
+     * @param symbol Symbol to calibrate (uses all events if empty)
+     * @return Calibrated MarketImpactModel
+     *
+     * Uses price changes between consecutive trades to estimate impact.
+     * The square-root law is fitted: impact = coeff * sqrt(volume/ADV)
+     */
+    MarketImpactModel calibrate_impact_model(const std::string& symbol = "") {
+        if (event_timeline_.empty()) {
+            std::cerr << "Warning: No events in timeline. Using default impact model.\n";
+            return MarketImpactModel();
+        }
+
+        // Filter events for the specified symbol
+        std::vector<const MarketEvent*> symbol_events;
+        for (const auto& event : event_timeline_) {
+            if (event.type == MarketEventType::TRADE) {
+                if (symbol.empty() || event.symbol == symbol) {
+                    symbol_events.push_back(&event);
+                }
+            }
+        }
+
+        if (symbol_events.size() < 10) {
+            std::cerr << "Warning: Too few events for calibration ("
+                      << symbol_events.size() << "). Using default parameters.\n";
+            return MarketImpactModel();
+        }
+
+        // Compute ADV estimate from the data
+        uint64_t total_volume = 0;
+        for (const auto* event : symbol_events) {
+            total_volume += event->volume;
+        }
+
+        // Use config ADV if available, otherwise estimate from data
+        uint64_t adv = config_.assumed_adv;
+        if (adv == 0) {
+            // Estimate: assume we have ~1 day of data
+            adv = total_volume;
+        }
+
+        // Calibrate using MarketImpactCalibrator
+        MarketImpactCalibrator calibrator;
+        calibrator.set_min_participation_rate(0.00001);  // Very small trades
+        calibrator.set_min_price_impact(0.000001);       // Small price changes
+
+        for (size_t i = 1; i < symbol_events.size(); ++i) {
+            double volume_ratio = static_cast<double>(symbol_events[i]->volume) / adv;
+            double price_impact = std::abs(symbol_events[i]->price - symbol_events[i-1]->price)
+                                  / symbol_events[i-1]->price;
+
+            if (volume_ratio > 0.0 && price_impact > 0.0) {
+                calibrator.add_observation(volume_ratio, price_impact);
+            }
+        }
+
+        std::cout << "Calibrating impact model with " << calibrator.observation_count()
+                  << " observations from " << symbol_events.size() << " trades.\n";
+
+        return calibrator.calibrate(adv);
+    }
+
+    /**
+     * @brief Tests an execution strategy on historical timeline data
+     * @param algo Execution algorithm to test
+     * @param symbol Symbol to execute on
+     * @param target_qty Target quantity to execute
+     * @return ExecutionStrategyResult with performance metrics
+     *
+     * Replays the historical timeline and simulates execution of child orders.
+     * Market impact is applied based on the calibrated model.
+     */
+    ExecutionStrategyResult test_execution_strategy(
+        ExecutionAlgorithm* algo,
+        const std::string& symbol,
+        uint64_t target_qty
+    ) {
+        if (event_timeline_.empty()) {
+            std::cerr << "Error: No events in timeline.\n";
+            return {};
+        }
+
+        // Filter events for the symbol
+        std::vector<const MarketEvent*> symbol_events;
+        for (const auto& event : event_timeline_) {
+            if (event.symbol == symbol && event.type == MarketEventType::TRADE) {
+                symbol_events.push_back(&event);
+            }
+        }
+
+        if (symbol_events.empty()) {
+            std::cerr << "Error: No events found for symbol " << symbol << "\n";
+            return {};
+        }
+
+        // Reset algorithm
+        algo->reset(target_qty, true);
+
+        ExecutionStrategyResult result;
+        result.algorithm_name = algo->name();
+        result.target_quantity = target_qty;
+
+        // Track execution
+        double arrival_price = symbol_events[0]->price;
+        double sum_price_qty = 0.0;
+        uint64_t total_executed = 0;
+        size_t num_trades = 0;
+
+        TimePoint sim_start = Clock::now();
+        uint64_t first_ts = symbol_events[0]->timestamp_ns;
+
+        // Convert events to MarketData and feed to algorithm
+        for (size_t i = 0; i < symbol_events.size() && !algo->is_complete(); ++i) {
+            const auto* event = symbol_events[i];
+
+            // Create market data from event
+            MarketData md;
+            md.price = event->price;
+            md.bid_price = event->price * 0.9999;  // Estimate bid
+            md.ask_price = event->price * 1.0001;  // Estimate ask
+            md.spread = md.ask_price - md.bid_price;
+            md.total_volume = event->volume;
+            md.symbol = event->symbol;
+
+            // Convert nanosecond timestamp to time point
+            auto elapsed_ns = event->timestamp_ns - first_ts;
+            md.timestamp = sim_start + std::chrono::nanoseconds(elapsed_ns);
+
+            // Get child orders from algorithm
+            auto orders = algo->on_market_data(md);
+
+            // Simulate execution of orders
+            for (auto& order : orders) {
+                // Fill at current market price (simplified)
+                double fill_price = (order.side == Side::BUY) ? md.ask_price : md.bid_price;
+                int fill_qty = std::min(order.quantity, static_cast<int>(algo->remaining_quantity()));
+
+                if (fill_qty > 0) {
+                    Fill fill(order.id, order.id, fill_price, fill_qty);
+                    fill.timestamp = md.timestamp;
+
+                    algo->on_fill(fill);
+
+                    sum_price_qty += fill_price * fill_qty;
+                    total_executed += fill_qty;
+                    num_trades++;
+                }
+            }
+        }
+
+        // Compute results
+        result.arrival_price = arrival_price;
+        result.terminal_price = symbol_events.back()->price;
+        result.total_quantity = total_executed;
+        result.num_trades = num_trades;
+
+        if (total_executed > 0) {
+            result.avg_execution_price = sum_price_qty / total_executed;
+            result.fill_rate = static_cast<double>(total_executed) / target_qty;
+
+            // Implementation shortfall: (avg_price - arrival_price) / arrival_price * 10000
+            result.implementation_shortfall_bps =
+                ((result.avg_execution_price - arrival_price) / arrival_price) * 10000.0;
+        }
+
+        // Calculate execution time from first to last fill
+        if (!algo->get_fills().empty()) {
+            auto first_fill = algo->get_fills().front().timestamp;
+            auto last_fill = algo->get_fills().back().timestamp;
+            result.execution_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                last_fill - first_fill);
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Converts event timeline to MarketData vector for simulator
+     * @param symbol Symbol to filter (uses all if empty)
+     * @return Vector of MarketData points
+     */
+    std::vector<MarketData> timeline_to_market_data(const std::string& symbol = "") const {
+        std::vector<MarketData> result;
+
+        if (event_timeline_.empty()) {
+            return result;
+        }
+
+        TimePoint base_time = Clock::now();
+        uint64_t first_ts = event_timeline_[0].timestamp_ns;
+
+        for (const auto& event : event_timeline_) {
+            if (!symbol.empty() && event.symbol != symbol) {
+                continue;
+            }
+
+            MarketData md;
+            md.price = event.price;
+            md.bid_price = event.price * 0.9999;
+            md.ask_price = event.price * 1.0001;
+            md.spread = md.ask_price - md.bid_price;
+            md.total_volume = event.volume;
+            md.symbol = event.symbol;
+
+            // Convert nanosecond timestamp to time point
+            auto elapsed_ns = event.timestamp_ns - first_ts;
+            md.timestamp = base_time + std::chrono::nanoseconds(elapsed_ns);
+
+            result.push_back(md);
+        }
+
+        return result;
+    }
+
+    /**
+     * @brief Computes average daily volume from the timeline
+     * @param symbol Symbol to compute ADV for (uses all if empty)
+     * @return Estimated ADV
+     */
+    uint64_t compute_adv(const std::string& symbol = "") const {
+        uint64_t total_volume = 0;
+        for (const auto& event : event_timeline_) {
+            if (symbol.empty() || event.symbol == symbol) {
+                total_volume += event.volume;
+            }
+        }
+        return total_volume;
     }
 };
 
