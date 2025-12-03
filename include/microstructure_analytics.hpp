@@ -1,7 +1,9 @@
 #ifndef MICROSTRUCTURE_ANALYTICS_HPP
 #define MICROSTRUCTURE_ANALYTICS_HPP
 
+#include "linear_regression.hpp"
 #include "market_events.hpp"
+#include "market_impact_calibration.hpp"
 #include "microstructure_order_book.hpp"
 #include "order_flow_tracker.hpp"
 #include "rolling_statistics.hpp"
@@ -79,8 +81,12 @@ private:
 
     // Market impact tracking
     SimpleImpactModel impact_model_;
+    MarketImpactModel calibrated_impact_model_;
+    MarketImpactCalibrator impact_calibrator_;
+    bool use_calibrated_model_ = false;
     std::vector<PriceImpactObservation> impact_observations_;
     std::unordered_map<std::string, uint64_t> symbol_adv_;  // Average Daily Volume
+    std::vector<EnhancedFill> calibration_fills_;  // Fills for calibration
 
     // Price tracking per symbol
     std::unordered_map<std::string, RollingStatistics<double, PRICE_HISTORY_SIZE>> price_history_;
@@ -309,6 +315,202 @@ public:
     }
 
     // ========================================================================
+    // MARKET IMPACT CALIBRATION
+    // ========================================================================
+
+    /**
+     * @brief Records a fill for calibration (in addition to regular processing)
+     * @param fill The fill to record for calibration
+     */
+    void record_fill_for_calibration(const EnhancedFill& fill) {
+        calibration_fills_.push_back(fill);
+    }
+
+    /**
+     * @brief Calibrates the impact model from accumulated fills
+     * @param symbol Symbol to calibrate for (uses ADV from symbol_adv_)
+     * @return true if calibration was successful
+     */
+    bool calibrate_impact_model(const std::string& symbol) {
+        uint64_t adv = get_symbol_adv(symbol);
+        return calibrate_impact_model(adv);
+    }
+
+    /**
+     * @brief Calibrates the impact model from accumulated fills
+     * @param adv Average daily volume to use
+     * @return true if calibration was successful
+     */
+    bool calibrate_impact_model(uint64_t adv) {
+        if (calibration_fills_.size() < 10) {
+            std::cout << "Warning: Too few fills for calibration ("
+                      << calibration_fills_.size() << ")\n";
+            return false;
+        }
+
+        calibrated_impact_model_ = impact_calibrator_.calibrate_from_enhanced_fills(
+            calibration_fills_, adv);
+
+        const auto& params = calibrated_impact_model_.get_parameters();
+        if (params.is_valid()) {
+            use_calibrated_model_ = true;
+            std::cout << "Impact model calibrated successfully:\n";
+            std::cout << "  Permanent coeff: " << params.permanent_impact_coeff << "\n";
+            std::cout << "  Temporary coeff: " << params.temporary_impact_coeff << "\n";
+            std::cout << "  Exponent: " << params.impact_exponent << "\n";
+            std::cout << "  R²: " << params.r_squared << "\n";
+            std::cout << "  Observations: " << params.num_observations << "\n";
+            return true;
+        }
+
+        std::cout << "Warning: Calibration produced invalid parameters\n";
+        return false;
+    }
+
+    /**
+     * @brief Calibrates from external fill data
+     * @param fills Vector of fills to calibrate from
+     * @param adv Average daily volume
+     * @return true if calibration was successful
+     */
+    bool calibrate_from_fills(const std::vector<Fill>& fills, uint64_t adv) {
+        calibrated_impact_model_ = ::calibrate_impact_model(fills, adv);
+
+        const auto& params = calibrated_impact_model_.get_parameters();
+        if (params.is_valid()) {
+            use_calibrated_model_ = true;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * @brief Calibrates from external enhanced fill data
+     * @param fills Vector of enhanced fills to calibrate from
+     * @param adv Average daily volume
+     * @return true if calibration was successful
+     */
+    bool calibrate_from_enhanced_fills(const std::vector<EnhancedFill>& fills, uint64_t adv) {
+        calibrated_impact_model_ = ::calibrate_impact_model(fills, adv);
+
+        const auto& params = calibrated_impact_model_.get_parameters();
+        if (params.is_valid()) {
+            use_calibrated_model_ = true;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * @brief Gets the calibrated impact model
+     * @return Reference to the calibrated model
+     */
+    const MarketImpactModel& get_calibrated_impact_model() const {
+        return calibrated_impact_model_;
+    }
+
+    /**
+     * @brief Gets mutable access to the calibrated impact model
+     * @return Reference to the calibrated model
+     */
+    MarketImpactModel& get_calibrated_impact_model() {
+        return calibrated_impact_model_;
+    }
+
+    /**
+     * @brief Estimates impact using the calibrated model if available
+     * @param volume Trade volume
+     * @param symbol Trading symbol
+     * @return Estimated total impact in basis points
+     */
+    double estimate_calibrated_impact(uint64_t volume, const std::string& symbol) const {
+        uint64_t adv = get_symbol_adv(symbol);
+        if (use_calibrated_model_) {
+            return calibrated_impact_model_.estimate_total_impact(volume, adv);
+        }
+        return impact_model_.estimate_impact(volume, adv);
+    }
+
+    /**
+     * @brief Estimates permanent impact using calibrated model
+     * @param volume Trade volume
+     * @param symbol Trading symbol
+     * @return Estimated permanent impact in basis points
+     */
+    double estimate_permanent_impact(uint64_t volume, const std::string& symbol) const {
+        uint64_t adv = get_symbol_adv(symbol);
+        if (use_calibrated_model_) {
+            return calibrated_impact_model_.estimate_permanent_impact(volume, adv);
+        }
+        // Simple model doesn't distinguish - return full impact
+        return impact_model_.estimate_impact(volume, adv);
+    }
+
+    /**
+     * @brief Estimates temporary impact using calibrated model
+     * @param volume Trade volume
+     * @param symbol Trading symbol
+     * @return Estimated temporary impact in basis points
+     */
+    double estimate_temporary_impact(uint64_t volume, const std::string& symbol) const {
+        uint64_t adv = get_symbol_adv(symbol);
+        if (use_calibrated_model_) {
+            return calibrated_impact_model_.estimate_temporary_impact(volume, adv);
+        }
+        // Simple model doesn't have temporary component
+        return 0.0;
+    }
+
+    /**
+     * @brief Checks if calibrated model is in use
+     * @return true if using calibrated model
+     */
+    bool is_using_calibrated_model() const {
+        return use_calibrated_model_;
+    }
+
+    /**
+     * @brief Enables or disables use of calibrated model
+     * @param use Whether to use the calibrated model
+     */
+    void set_use_calibrated_model(bool use) {
+        use_calibrated_model_ = use;
+    }
+
+    /**
+     * @brief Gets fills accumulated for calibration
+     * @return Vector of fills
+     */
+    const std::vector<EnhancedFill>& get_calibration_fills() const {
+        return calibration_fills_;
+    }
+
+    /**
+     * @brief Clears calibration fills
+     */
+    void clear_calibration_fills() {
+        calibration_fills_.clear();
+    }
+
+    /**
+     * @brief Gets the calibration data summary
+     */
+    void print_calibration_summary() const {
+        std::cout << "\n=== Calibration Summary ===\n";
+        std::cout << "Fills for calibration: " << calibration_fills_.size() << "\n";
+        std::cout << "Using calibrated model: " << (use_calibrated_model_ ? "Yes" : "No") << "\n";
+
+        if (use_calibrated_model_) {
+            const auto& params = calibrated_impact_model_.get_parameters();
+            std::cout << "Calibrated parameters:\n";
+            std::cout << "  Permanent coeff: " << params.permanent_impact_coeff << "\n";
+            std::cout << "  Temporary coeff: " << params.temporary_impact_coeff << "\n";
+            std::cout << "  Exponent: " << params.impact_exponent << "\n";
+            std::cout << "  R²: " << params.r_squared << "\n";
+        }
+    }
+
+    // ========================================================================
     // TRADE METRICS
     // ========================================================================
 
@@ -431,6 +633,9 @@ public:
         flow_tracker_.clear();
         symbol_flow_tracker_.clear();
         impact_observations_.clear();
+        calibration_fills_.clear();
+        impact_calibrator_.clear();
+        use_calibrated_model_ = false;
         price_history_.clear();
         last_price_.clear();
         current_metrics_ = TradeMetrics{};
@@ -482,6 +687,17 @@ public:
         if (!impact_observations_.empty()) {
             std::cout << "\n--- Impact Observations ---\n";
             std::cout << "  Observations recorded: " << impact_observations_.size() << "\n";
+        }
+
+        std::cout << "\n--- Market Impact Calibration ---\n";
+        std::cout << "  Fills for calibration: " << calibration_fills_.size() << "\n";
+        std::cout << "  Using calibrated model: " << (use_calibrated_model_ ? "Yes" : "No") << "\n";
+        if (use_calibrated_model_) {
+            const auto& params = calibrated_impact_model_.get_parameters();
+            std::cout << "  Permanent coeff: " << params.permanent_impact_coeff << "\n";
+            std::cout << "  Temporary coeff: " << params.temporary_impact_coeff << "\n";
+            std::cout << "  Impact exponent: " << params.impact_exponent << "\n";
+            std::cout << "  R²: " << params.r_squared << "\n";
         }
 
         std::cout << "\n========================================\n";
