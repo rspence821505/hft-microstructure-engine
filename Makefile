@@ -39,6 +39,7 @@ ORDER_BOOK_SRCS = \
 BACKTESTER_SRC = $(SRC_DIR)/csv/backtester.cpp
 PLATFORM_DEMO_SRC = $(EXAMPLES_DIR)/platform_demo.cpp
 HISTORICAL_ANALYSIS_SRC = $(EXAMPLES_DIR)/historical_analysis.cpp
+EXECUTION_TESTING_SRC = $(EXAMPLES_DIR)/execution_testing.cpp
 REALTIME_MONITORING_SRC = $(EXAMPLES_DIR)/real_time_monitoring.cpp
 ORDERBOOK_TEST_SRC = $(TESTS_DIR)/test_microstructure_order_book.cpp
 FLOW_TRACKING_TEST_SRC = $(TESTS_DIR)/test_order_flow_tracking.cpp
@@ -55,6 +56,7 @@ BACKTESTER = $(BUILD_DIR)/backtester
 BACKTESTER_DEBUG = $(BUILD_DIR)/backtester_debug
 PLATFORM_DEMO = $(BUILD_DIR)/platform_demo
 HISTORICAL_ANALYSIS = $(BUILD_DIR)/historical_analysis
+EXECUTION_TESTING = $(BUILD_DIR)/execution_testing
 REALTIME_MONITORING = $(BUILD_DIR)/real_time_monitoring
 ORDERBOOK_TEST = $(BUILD_DIR)/test_order_book
 FLOW_TRACKING_TEST = $(BUILD_DIR)/test_flow_tracking
@@ -68,7 +70,7 @@ PERF_BENCHMARK = $(BUILD_DIR)/test_performance_benchmarks
 
 # Default target
 .PHONY: all
-all: $(BACKTESTER) $(PLATFORM_DEMO) $(HISTORICAL_ANALYSIS) $(REALTIME_MONITORING) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(VWAP_TEST) $(ALMGREN_CHRISS_TEST) $(EXECUTION_COSTS_TEST) $(PERF_BENCHMARK)
+all: $(BACKTESTER) $(PLATFORM_DEMO) $(HISTORICAL_ANALYSIS) $(EXECUTION_TESTING) $(REALTIME_MONITORING) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(VWAP_TEST) $(ALMGREN_CHRISS_TEST) $(EXECUTION_COSTS_TEST) $(PERF_BENCHMARK)
 
 # Create build directory
 $(BUILD_DIR):
@@ -96,6 +98,9 @@ platform_demo: $(PLATFORM_DEMO)
 .PHONY: historical_analysis
 historical_analysis: $(HISTORICAL_ANALYSIS)
 
+.PHONY: execution_testing
+execution_testing: $(EXECUTION_TESTING)
+
 .PHONY: real_time_monitoring
 real_time_monitoring: $(REALTIME_MONITORING)
 
@@ -111,6 +116,11 @@ $(PLATFORM_DEMO): $(PLATFORM_DEMO_SRC) | $(BUILD_DIR)
 $(HISTORICAL_ANALYSIS): $(HISTORICAL_ANALYSIS_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
 		-o $@ $(HISTORICAL_ANALYSIS_SRC)
+
+# Build execution testing example
+$(EXECUTION_TESTING): $(EXECUTION_TESTING_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(EXECUTION_TESTING_SRC)
 
 # Build real-time monitoring example
 $(REALTIME_MONITORING): $(REALTIME_MONITORING_SRC) | $(BUILD_DIR)
@@ -151,6 +161,18 @@ run-historical: $(HISTORICAL_ANALYSIS)
 	else \
 		echo "Warning: Sample data file not found at $(DATA_DIR)/calibration_test.csv"; \
 		echo "Please provide a CSV file: $(HISTORICAL_ANALYSIS) <csv_file> [symbol]"; \
+	fi
+	@echo ""
+
+# Run execution testing example
+.PHONY: run-execution
+run-execution: $(EXECUTION_TESTING)
+	@echo "=== Running Execution Testing Example ==="
+	@if [ -f "$(DATA_DIR)/calibration_test.csv" ]; then \
+		$(EXECUTION_TESTING) $(DATA_DIR)/calibration_test.csv AAPL 100000; \
+	else \
+		echo "Warning: Sample data file not found at $(DATA_DIR)/calibration_test.csv"; \
+		echo "Please provide a CSV file: $(EXECUTION_TESTING) <csv_file> <symbol> <quantity>"; \
 	fi
 	@echo ""
 
@@ -370,9 +392,11 @@ help:
 	@echo "Platform Integration:"
 	@echo "  make platform_demo         - Build platform demo"
 	@echo "  make historical_analysis   - Build historical analysis example"
+	@echo "  make execution_testing     - Build execution testing example"
 	@echo "  make real_time_monitoring  - Build real-time monitoring example"
 	@echo "  make run-platform          - Run platform demo"
 	@echo "  make run-historical        - Run historical analysis example"
+	@echo "  make run-execution         - Run execution testing example"
 	@echo "  make run-realtime          - Run real-time monitoring example"
 	@echo "  make run-platform-verbose  - Run platform demo with verbose output"
 	@echo "  make debug-platform        - Build platform demo in debug mode"
