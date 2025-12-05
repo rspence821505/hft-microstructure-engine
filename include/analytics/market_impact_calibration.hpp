@@ -166,6 +166,30 @@ public:
     }
 
     /**
+     * @brief Gets the permanent impact coefficient
+     * @return Permanent impact coefficient
+     */
+    double get_permanent_coef() const {
+        return params_.permanent_impact_coeff;
+    }
+
+    /**
+     * @brief Gets the temporary impact coefficient
+     * @return Temporary impact coefficient
+     */
+    double get_temporary_coef() const {
+        return params_.temporary_impact_coeff;
+    }
+
+    /**
+     * @brief Gets the default ADV
+     * @return Average daily volume
+     */
+    uint64_t get_adv() const {
+        return default_adv_;
+    }
+
+    /**
      * @brief Gets the default ADV
      * @return Default ADV
      */

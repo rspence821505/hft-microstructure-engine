@@ -35,6 +35,8 @@
 #include "multi_feed_aggregator.hpp"
 #include "performance_monitor.hpp"
 #include "twap_strategy.hpp"
+#include "vwap_strategy.hpp"
+#include "almgren_chriss_strategy.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -579,6 +581,54 @@ public:
 
       ExecutionComparison::AlgorithmResult algo;
       algo.name = "TWAP-" + std::to_string(minutes) + "min";
+      algo.avg_price = result.avg_execution_price;
+      algo.implementation_shortfall_bps = result.implementation_shortfall_bps;
+      algo.fill_rate = result.fill_rate;
+      algo.num_trades = result.num_trades;
+      algo.execution_time_ms = result.execution_time.count();
+      comparison.results.push_back(algo);
+    }
+
+    // Test VWAP with different profiles
+    std::vector<std::pair<std::string, VWAPStrategy::VolumeProfile>> vwap_profiles = {
+      {"VWAP-Uniform", VWAPStrategy::VolumeProfile::UNIFORM},
+      {"VWAP-UShaped", VWAPStrategy::VolumeProfile::U_SHAPED},
+      {"VWAP-Morning", VWAPStrategy::VolumeProfile::MORNING}
+    };
+
+    for (const auto& [name, profile] : vwap_profiles) {
+      VWAPStrategy vwap_variant(target_qty, 30, 30, profile);
+      auto result = backtester_->test_execution_strategy(&vwap_variant, symbol,
+                                                         target_qty);
+
+      ExecutionComparison::AlgorithmResult algo;
+      algo.name = name;
+      algo.avg_price = result.avg_execution_price;
+      algo.implementation_shortfall_bps = result.implementation_shortfall_bps;
+      algo.fill_rate = result.fill_rate;
+      algo.num_trades = result.num_trades;
+      algo.execution_time_ms = result.execution_time.count();
+      comparison.results.push_back(algo);
+    }
+
+    // Test Almgren-Chriss with different risk levels
+    std::vector<std::pair<std::string, double>> ac_risks = {
+      {"AC-Aggressive", 1e-8},
+      {"AC-Moderate", 1e-6},
+      {"AC-Conservative", 1e-4}
+    };
+
+    for (const auto& [name, risk] : ac_risks) {
+      AlmgrenChrissStrategy ac_variant(target_qty, 30, 30);
+      ac_variant.set_risk_aversion(risk);
+      ac_variant.set_market_impact(0.1, 0.01, config_.backtester.assumed_adv);
+      ac_variant.set_volatility(0.02);
+
+      auto result = backtester_->test_execution_strategy(&ac_variant, symbol,
+                                                         target_qty);
+
+      ExecutionComparison::AlgorithmResult algo;
+      algo.name = name;
       algo.avg_price = result.avg_execution_price;
       algo.implementation_shortfall_bps = result.implementation_shortfall_bps;
       algo.fill_rate = result.fill_rate;

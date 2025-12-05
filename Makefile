@@ -42,6 +42,8 @@ ORDERBOOK_TEST_SRC = $(TESTS_DIR)/test_microstructure_order_book.cpp
 FLOW_TRACKING_TEST_SRC = $(TESTS_DIR)/test_order_flow_tracking.cpp
 CALIBRATION_TEST_SRC = $(TESTS_DIR)/test_market_impact_calibration.cpp
 TWAP_TEST_SRC = $(TESTS_DIR)/test_twap_strategy.cpp
+VWAP_TEST_SRC = $(TESTS_DIR)/test_vwap_strategy.cpp
+ALMGREN_CHRISS_TEST_SRC = $(TESTS_DIR)/test_almgren_chriss_strategy.cpp
 EXECUTION_COSTS_TEST_SRC = $(TESTS_DIR)/test_execution_costs.cpp
 PLATFORM_TEST_SRC = $(TESTS_DIR)/test_platform_integration.cpp
 PERF_BENCHMARK_SRC = $(BENCHMARKS_DIR)/test_performance_benchmarks.cpp
@@ -54,13 +56,15 @@ ORDERBOOK_TEST = $(BUILD_DIR)/test_order_book
 FLOW_TRACKING_TEST = $(BUILD_DIR)/test_flow_tracking
 CALIBRATION_TEST = $(BUILD_DIR)/test_calibration
 TWAP_TEST = $(BUILD_DIR)/test_twap
+VWAP_TEST = $(BUILD_DIR)/test_vwap
+ALMGREN_CHRISS_TEST = $(BUILD_DIR)/test_almgren_chriss
 EXECUTION_COSTS_TEST = $(BUILD_DIR)/test_execution_costs
 PLATFORM_TEST = $(BUILD_DIR)/test_platform
 PERF_BENCHMARK = $(BUILD_DIR)/test_performance_benchmarks
 
 # Default target
 .PHONY: all
-all: $(BACKTESTER) $(PLATFORM_DEMO) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(EXECUTION_COSTS_TEST) $(PERF_BENCHMARK)
+all: $(BACKTESTER) $(PLATFORM_DEMO) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(VWAP_TEST) $(ALMGREN_CHRISS_TEST) $(EXECUTION_COSTS_TEST) $(PERF_BENCHMARK)
 
 # Create build directory
 $(BUILD_DIR):
@@ -142,6 +146,16 @@ $(TWAP_TEST): $(TWAP_TEST_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
 		-o $@ $(TWAP_TEST_SRC) $(ORDER_BOOK_SRCS)
 
+# Build VWAP strategy test
+$(VWAP_TEST): $(VWAP_TEST_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(VWAP_TEST_SRC) $(ORDER_BOOK_SRCS)
+
+# Build Almgren-Chriss strategy test
+$(ALMGREN_CHRISS_TEST): $(ALMGREN_CHRISS_TEST_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(ALMGREN_CHRISS_TEST_SRC) $(ORDER_BOOK_SRCS)
+
 # Build execution costs test
 $(EXECUTION_COSTS_TEST): $(EXECUTION_COSTS_TEST_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
@@ -175,6 +189,18 @@ debug-calibration: | $(BUILD_DIR)
 debug-twap: | $(BUILD_DIR)
 	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
 		-o $(BUILD_DIR)/test_twap_debug $(TWAP_TEST_SRC) $(ORDER_BOOK_SRCS)
+
+# Build VWAP test in debug mode
+.PHONY: debug-vwap
+debug-vwap: | $(BUILD_DIR)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
+		-o $(BUILD_DIR)/test_vwap_debug $(VWAP_TEST_SRC) $(ORDER_BOOK_SRCS)
+
+# Build Almgren-Chriss test in debug mode
+.PHONY: debug-almgren-chriss
+debug-almgren-chriss: | $(BUILD_DIR)
+	$(CXX) $(DEBUG_FLAGS) $(EXTERNAL_INCLUDES) \
+		-o $(BUILD_DIR)/test_almgren_chriss_debug $(ALMGREN_CHRISS_TEST_SRC) $(ORDER_BOOK_SRCS)
 
 # Build execution costs test in debug mode
 .PHONY: debug-execution-costs
@@ -224,6 +250,20 @@ test-twap: $(TWAP_TEST)
 	$(TWAP_TEST)
 	@echo ""
 
+# Run VWAP strategy tests
+.PHONY: test-vwap
+test-vwap: $(VWAP_TEST)
+	@echo "=== Running VWAP Strategy Tests ==="
+	$(VWAP_TEST)
+	@echo ""
+
+# Run Almgren-Chriss strategy tests
+.PHONY: test-almgren-chriss
+test-almgren-chriss: $(ALMGREN_CHRISS_TEST)
+	@echo "=== Running Almgren-Chriss Strategy Tests ==="
+	$(ALMGREN_CHRISS_TEST)
+	@echo ""
+
 # Run execution costs tests
 .PHONY: test-execution-costs
 test-execution-costs: $(EXECUTION_COSTS_TEST)
@@ -254,7 +294,7 @@ test-platform: $(PLATFORM_TEST)
 
 # Run all tests
 .PHONY: test
-test: test-backtester test-orderbook test-flow test-calibration test-twap test-execution-costs test-performance
+test: test-backtester test-orderbook test-flow test-calibration test-twap test-vwap test-almgren-chriss test-execution-costs test-performance
 	@echo "=== All Tests Complete ==="
 
 # Run all tests including platform integration
@@ -303,6 +343,8 @@ help:
 	@echo "  make debug-flow         - Build flow tracking test in debug mode"
 	@echo "  make debug-calibration  - Build calibration test in debug mode"
 	@echo "  make debug-twap         - Build TWAP test in debug mode"
+	@echo "  make debug-vwap         - Build VWAP test in debug mode"
+	@echo "  make debug-almgren-chriss - Build Almgren-Chriss test in debug mode"
 	@echo "  make debug-execution-costs - Build execution costs test in debug mode"
 	@echo ""
 	@echo "Test Targets:"
@@ -313,6 +355,8 @@ help:
 	@echo "  make test-flow          - Run flow tracking tests only"
 	@echo "  make test-calibration   - Run calibration tests only"
 	@echo "  make test-twap          - Run TWAP strategy tests only"
+	@echo "  make test-vwap          - Run VWAP strategy tests only"
+	@echo "  make test-almgren-chriss - Run Almgren-Chriss strategy tests only"
 	@echo "  make test-execution-costs - Run execution costs tests"
 	@echo "  make test-performance   - Run performance benchmarks"
 	@echo ""
@@ -324,6 +368,8 @@ help:
 	@echo "  ./build/test_flow_tracking"
 	@echo "  ./build/test_calibration"
 	@echo "  ./build/test_twap"
+	@echo "  ./build/test_vwap"
+	@echo "  ./build/test_almgren_chriss"
 	@echo "  ./build/test_execution_costs"
 	@echo "  ./build/test_performance_benchmarks"
 	@echo "  ./build/test_platform"

@@ -12,6 +12,8 @@
 
 #include "backtester.hpp"
 #include "twap_strategy.hpp"
+#include "vwap_strategy.hpp"
+#include "almgren_chriss_strategy.hpp"
 #include "execution_simulator.hpp"
 #include "market_impact_calibration.hpp"
 
@@ -245,27 +247,67 @@ void test_strategy_comparison() {
 
     const uint64_t target_qty = 50000;
 
-    // Test TWAP with different slice counts
-    std::vector<std::pair<std::string, int>> strategies = {
-        {"TWAP-10", 10},
-        {"TWAP-20", 20},
-        {"TWAP-50", 50},
-        {"TWAP-100", 100}
-    };
-
-    std::cout << std::left << std::setw(12) << "Strategy"
+    std::cout << std::left << std::setw(15) << "Strategy"
               << std::right << std::setw(14) << "Avg Price"
               << std::setw(18) << "Shortfall(bps)"
               << std::setw(12) << "Fill Rate"
               << std::setw(10) << "Trades"
               << "\n";
-    std::cout << std::string(66, '-') << "\n";
+    std::cout << std::string(69, '-') << "\n";
 
-    for (const auto& [name, slices] : strategies) {
+    // Test TWAP with different slice counts
+    std::vector<std::pair<std::string, int>> twap_strategies = {
+        {"TWAP-10", 10},
+        {"TWAP-20", 20},
+        {"TWAP-50", 50}
+    };
+
+    for (const auto& [name, slices] : twap_strategies) {
         TWAPStrategy twap(target_qty, std::chrono::milliseconds(1000), slices, true);
         auto result = backtester.test_execution_strategy(&twap, "AAPL", target_qty);
 
-        std::cout << std::left << std::setw(12) << name
+        std::cout << std::left << std::setw(15) << name
+                  << std::right << std::setw(14) << std::fixed << std::setprecision(4) << result.avg_execution_price
+                  << std::setw(18) << std::setprecision(2) << result.implementation_shortfall_bps
+                  << std::setw(12) << std::setprecision(1) << (result.fill_rate * 100) << "%"
+                  << std::setw(10) << result.num_trades
+                  << "\n";
+    }
+
+    // Test VWAP with different profiles
+    std::vector<std::pair<std::string, VWAPStrategy::VolumeProfile>> vwap_strategies = {
+        {"VWAP-Uniform", VWAPStrategy::VolumeProfile::UNIFORM},
+        {"VWAP-UShaped", VWAPStrategy::VolumeProfile::U_SHAPED},
+        {"VWAP-Morning", VWAPStrategy::VolumeProfile::MORNING}
+    };
+
+    for (const auto& [name, profile] : vwap_strategies) {
+        VWAPStrategy vwap(target_qty, std::chrono::milliseconds(1000), 30, profile, true);
+        auto result = backtester.test_execution_strategy(&vwap, "AAPL", target_qty);
+
+        std::cout << std::left << std::setw(15) << name
+                  << std::right << std::setw(14) << std::fixed << std::setprecision(4) << result.avg_execution_price
+                  << std::setw(18) << std::setprecision(2) << result.implementation_shortfall_bps
+                  << std::setw(12) << std::setprecision(1) << (result.fill_rate * 100) << "%"
+                  << std::setw(10) << result.num_trades
+                  << "\n";
+    }
+
+    // Test Almgren-Chriss with different risk levels
+    std::vector<std::pair<std::string, double>> ac_strategies = {
+        {"AC-Aggressive", 1e-8},
+        {"AC-Moderate", 1e-6},
+        {"AC-Conservative", 1e-4}
+    };
+
+    for (const auto& [name, risk_aversion] : ac_strategies) {
+        AlmgrenChrissStrategy ac(target_qty, std::chrono::milliseconds(1000), 30, true);
+        ac.set_risk_aversion(risk_aversion);
+        ac.set_market_impact(0.1, 0.01, config.assumed_adv);
+        ac.set_volatility(0.025);
+        auto result = backtester.test_execution_strategy(&ac, "AAPL", target_qty);
+
+        std::cout << std::left << std::setw(15) << name
                   << std::right << std::setw(14) << std::fixed << std::setprecision(4) << result.avg_execution_price
                   << std::setw(18) << std::setprecision(2) << result.implementation_shortfall_bps
                   << std::setw(12) << std::setprecision(1) << (result.fill_rate * 100) << "%"
@@ -297,25 +339,47 @@ void test_execution_with_impact_simulation() {
 
     const uint64_t target_qty = 100000;
 
-    // Test TWAP
-    TWAPStrategy twap(target_qty, std::chrono::milliseconds(5000), 50, true);
-
-    auto result = sim.run_simulation(twap, std::chrono::milliseconds(10000));
-
-    std::cout << "Simulation Results:\n";
-    result.print();
-
-    // Estimate naive cost
+    // Estimate naive cost first
     double naive_cost = sim.estimate_naive_cost(target_qty);
-    std::cout << "\nNaive execution cost estimate: " << naive_cost << " bps\n";
+    std::cout << "Naive execution cost estimate: " << naive_cost << " bps\n\n";
 
-    // Compare
-    double savings = naive_cost - std::abs(result.report.implementation_shortfall_bps);
-    std::cout << "Estimated savings from TWAP: " << savings << " bps\n";
+    // Test TWAP
+    std::cout << "=== TWAP Execution ===\n";
+    TWAPStrategy twap(target_qty, std::chrono::milliseconds(5000), 50, true);
+    auto twap_result = sim.run_simulation(twap, std::chrono::milliseconds(10000));
+    twap_result.print();
+    double twap_savings = naive_cost - std::abs(twap_result.report.implementation_shortfall_bps);
+    std::cout << "Savings vs naive: " << twap_savings << " bps\n";
+    assert(twap_result.completed);
 
-    // Verify results are reasonable
-    assert(result.completed);
-    assert(result.report.total_quantity > 0);
+    // Reset simulator
+    sim.reset();
+
+    // Test VWAP
+    std::cout << "\n=== VWAP Execution (U-Shaped) ===\n";
+    VWAPStrategy vwap(target_qty, std::chrono::milliseconds(5000), 50,
+                      VWAPStrategy::VolumeProfile::U_SHAPED, true);
+    auto vwap_result = sim.run_simulation(vwap, std::chrono::milliseconds(10000));
+    vwap_result.print();
+    double vwap_savings = naive_cost - std::abs(vwap_result.report.implementation_shortfall_bps);
+    std::cout << "Savings vs naive: " << vwap_savings << " bps\n";
+    assert(vwap_result.completed);
+
+    // Reset simulator
+    sim.reset();
+
+    // Test Almgren-Chriss
+    std::cout << "\n=== Almgren-Chriss Execution ===\n";
+    AlmgrenChrissStrategy ac(target_qty, std::chrono::milliseconds(5000), 50, impact_model, true);
+    ac.set_risk_aversion(1e-6);
+    ac.set_volatility(0.02);
+    auto ac_result = sim.run_simulation(ac, std::chrono::milliseconds(10000));
+    ac_result.print();
+    double ac_savings = naive_cost - std::abs(ac_result.report.implementation_shortfall_bps);
+    std::cout << "Savings vs naive: " << ac_savings << " bps\n";
+    std::cout << "Estimated optimal cost: " << ac.estimate_expected_cost() << " bps\n";
+    assert(ac_result.completed);
+    assert(ac_result.report.total_quantity > 0);
 }
 
 /**
