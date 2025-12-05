@@ -38,6 +38,8 @@ ORDER_BOOK_SRCS = \
 # Source files
 BACKTESTER_SRC = $(SRC_DIR)/csv/backtester.cpp
 PLATFORM_DEMO_SRC = $(EXAMPLES_DIR)/platform_demo.cpp
+HISTORICAL_ANALYSIS_SRC = $(EXAMPLES_DIR)/historical_analysis.cpp
+REALTIME_MONITORING_SRC = $(EXAMPLES_DIR)/real_time_monitoring.cpp
 ORDERBOOK_TEST_SRC = $(TESTS_DIR)/test_microstructure_order_book.cpp
 FLOW_TRACKING_TEST_SRC = $(TESTS_DIR)/test_order_flow_tracking.cpp
 CALIBRATION_TEST_SRC = $(TESTS_DIR)/test_market_impact_calibration.cpp
@@ -52,6 +54,8 @@ PERF_BENCHMARK_SRC = $(BENCHMARKS_DIR)/test_performance_benchmarks.cpp
 BACKTESTER = $(BUILD_DIR)/backtester
 BACKTESTER_DEBUG = $(BUILD_DIR)/backtester_debug
 PLATFORM_DEMO = $(BUILD_DIR)/platform_demo
+HISTORICAL_ANALYSIS = $(BUILD_DIR)/historical_analysis
+REALTIME_MONITORING = $(BUILD_DIR)/real_time_monitoring
 ORDERBOOK_TEST = $(BUILD_DIR)/test_order_book
 FLOW_TRACKING_TEST = $(BUILD_DIR)/test_flow_tracking
 CALIBRATION_TEST = $(BUILD_DIR)/test_calibration
@@ -64,7 +68,7 @@ PERF_BENCHMARK = $(BUILD_DIR)/test_performance_benchmarks
 
 # Default target
 .PHONY: all
-all: $(BACKTESTER) $(PLATFORM_DEMO) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(VWAP_TEST) $(ALMGREN_CHRISS_TEST) $(EXECUTION_COSTS_TEST) $(PERF_BENCHMARK)
+all: $(BACKTESTER) $(PLATFORM_DEMO) $(HISTORICAL_ANALYSIS) $(REALTIME_MONITORING) $(ORDERBOOK_TEST) $(FLOW_TRACKING_TEST) $(CALIBRATION_TEST) $(TWAP_TEST) $(VWAP_TEST) $(ALMGREN_CHRISS_TEST) $(EXECUTION_COSTS_TEST) $(PERF_BENCHMARK)
 
 # Create build directory
 $(BUILD_DIR):
@@ -89,6 +93,12 @@ $(BACKTESTER_DEBUG): $(BACKTESTER_SRC) | $(BUILD_DIR)
 .PHONY: platform_demo
 platform_demo: $(PLATFORM_DEMO)
 
+.PHONY: historical_analysis
+historical_analysis: $(HISTORICAL_ANALYSIS)
+
+.PHONY: real_time_monitoring
+real_time_monitoring: $(REALTIME_MONITORING)
+
 .PHONY: test_platform
 test_platform: $(PLATFORM_TEST)
 
@@ -96,6 +106,16 @@ test_platform: $(PLATFORM_TEST)
 $(PLATFORM_DEMO): $(PLATFORM_DEMO_SRC) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
 		-o $@ $(PLATFORM_DEMO_SRC) $(ORDER_BOOK_SRCS)
+
+# Build historical analysis example
+$(HISTORICAL_ANALYSIS): $(HISTORICAL_ANALYSIS_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(HISTORICAL_ANALYSIS_SRC)
+
+# Build real-time monitoring example
+$(REALTIME_MONITORING): $(REALTIME_MONITORING_SRC) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(EXTERNAL_INCLUDES) \
+		-o $@ $(REALTIME_MONITORING_SRC) -pthread
 
 # Build platform demo in debug mode
 .PHONY: debug-platform
@@ -121,6 +141,26 @@ run-platform-verbose: $(PLATFORM_DEMO)
 	@echo "=== Running Platform Demo (Verbose) ==="
 	$(PLATFORM_DEMO) --verbose $(DATA_DIR)/calibration_test.csv
 	@echo ""
+
+# Run historical analysis example
+.PHONY: run-historical
+run-historical: $(HISTORICAL_ANALYSIS)
+	@echo "=== Running Historical Analysis Example ==="
+	@if [ -f "$(DATA_DIR)/calibration_test.csv" ]; then \
+		$(HISTORICAL_ANALYSIS) $(DATA_DIR)/calibration_test.csv AAPL; \
+	else \
+		echo "Warning: Sample data file not found at $(DATA_DIR)/calibration_test.csv"; \
+		echo "Please provide a CSV file: $(HISTORICAL_ANALYSIS) <csv_file> [symbol]"; \
+	fi
+	@echo ""
+
+# Run real-time monitoring example
+.PHONY: run-realtime
+run-realtime: $(REALTIME_MONITORING)
+	@echo "=== Running Real-Time Monitoring Example ==="
+	@echo "Press Ctrl+C to stop..."
+	@echo ""
+	$(REALTIME_MONITORING)
 
 # ============================================================
 # Existing Build Targets
@@ -328,11 +368,15 @@ help:
 	@echo "  make install      - Install to /usr/local/bin"
 	@echo ""
 	@echo "Platform Integration:"
-	@echo "  make platform_demo      - Build platform demo"
-	@echo "  make run-platform       - Run platform demo"
-	@echo "  make run-platform-verbose - Run platform demo with verbose output"
-	@echo "  make debug-platform     - Build platform demo in debug mode"
-	@echo "  make test-platform      - Run platform integration tests"
+	@echo "  make platform_demo         - Build platform demo"
+	@echo "  make historical_analysis   - Build historical analysis example"
+	@echo "  make real_time_monitoring  - Build real-time monitoring example"
+	@echo "  make run-platform          - Run platform demo"
+	@echo "  make run-historical        - Run historical analysis example"
+	@echo "  make run-realtime          - Run real-time monitoring example"
+	@echo "  make run-platform-verbose  - Run platform demo with verbose output"
+	@echo "  make debug-platform        - Build platform demo in debug mode"
+	@echo "  make test-platform         - Run platform integration tests"
 	@echo ""
 	@echo "Performance Optimization:"
 	@echo "  make run-benchmark      - Run performance benchmark demo"
@@ -363,6 +407,8 @@ help:
 	@echo "Executables:"
 	@echo "  ./build/backtester [options] filename.csv"
 	@echo "  ./build/platform_demo [options] filename.csv"
+	@echo "  ./build/historical_analysis <csv_file> [symbol]"
+	@echo "  ./build/real_time_monitoring  (real-time feed monitoring)"
 	@echo "  ./build/platform_demo --benchmark  (performance benchmarks)"
 	@echo "  ./build/test_order_book"
 	@echo "  ./build/test_flow_tracking"
